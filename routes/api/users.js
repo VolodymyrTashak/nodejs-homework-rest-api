@@ -1,6 +1,6 @@
 const express = require("express");
 const { upload } = require("../../middlewares/upload");
-const { register, login, logout, current, updateAvatar } = require("../../controllers/users.controller");
+const { register, login, logout, current, updateAvatar , verifyEmail , verify } = require("../../controllers/users.controller");
 const { tryCatchWrapper} = require("../../helpers/index");
 const { auth } = require("../../middlewares/index");
 
@@ -10,6 +10,8 @@ authRouter.post("/register", tryCatchWrapper(register));
 authRouter.post("/login", tryCatchWrapper(login));
 authRouter.post("/logout", tryCatchWrapper(auth), tryCatchWrapper(logout));
 authRouter.get("/current", tryCatchWrapper(auth), tryCatchWrapper(current));
+authRouter.get("/verify/:verificationToken", tryCatchWrapper(verifyEmail));
+authRouter.post("/users/verify", tryCatchWrapper(verify));
 // authRouter.patch("/:id", tryCatchWrapper(auth), tryCatchWrapper(updateSubscription));
 authRouter.patch("/avatars", upload.single("avatar"), auth, tryCatchWrapper(updateAvatar));
 authRouter.use("/download", express.static("./tmp"));
