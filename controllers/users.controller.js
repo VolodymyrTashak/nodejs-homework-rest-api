@@ -5,6 +5,8 @@ const gravatar = require("gravatar");
 const path = require("path");
 const fs = require("fs/promises");
 const Jimp = require("jimp");
+const { sendMail } = require("../helpers/index");
+const { nanoid } = require("nanoid");
 
 async function register(req, res, next) {
     const { email, password } = req.body;
@@ -14,21 +16,34 @@ async function register(req, res, next) {
   
     try {
       const avatarURL = gravatar.url(email);
+      const verificationToken = nanoid();
+
       const savedUser = await Users.create({
         email,
         password: hashedPassword,
         avatarURL,
+        verificationToken,
       });
+
       res.status(201).json({
           user: {
             email,
             subscription: savedUser.subscription,
           },
+          message: "Verification email sent",
       });
+
+      const mail = {
+        to:email,
+        subject: "Please confirm your email",
+        html: `<a href="localhost:3000/users/verify/${verificationToken}">Confirm your email</a>`,
+      };
+      await sendMail(mail);
     } catch (error) {
       if (error.message.includes("E11000 duplicate key error")) {
         return res.status(409).json({ message: "Email in use" });
       }
+      next();
       return error;
     }
   }
@@ -40,6 +55,10 @@ async function register(req, res, next) {
 
     if (!storedUser) {
       return res.status(401).json({ message: "Email is wrong" });
+    }
+
+    if (!storedUser.verify) {
+      return res.status(400).json({ message: "Email is not verified!" });
     }
 
     const isPasswordValid = await bcrypt.compare(password, storedUser.password);
@@ -76,6 +95,58 @@ async function register(req, res, next) {
       email,
       subscription,
     });
+  }
+
+  async function verifyEmail(req, res, next) {
+    const { verificationToken } = req.params;
+    const user = await Users.findOne({
+      verificationToken,
+    });
+
+    if(!user) {
+      return res.status(404).json({
+        message: "User not found",
+      })
+    }
+
+    await Users.findByIdAndUpdate(user._id, {
+      verify: true,
+      verificationToken: "",
+    })
+
+    return res.status(200).json({
+      message: "Verification successful"
+    })
+  }
+
+  async function verify(req, res, next) {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({
+        message: "missing required field email",
+      })
+    }
+
+    const user = await Users.findOne({
+      email,
+    });
+
+    if (!user.verify) {
+      const verificationToken = nanoid();
+      const mail = {
+        to:email,
+        subject: "Please confirm your email",
+        html: `<a href="localhost:3000/users/verify/${verificationToken}">Confirm your email</a>`,
+      };
+
+      await sendMail(mail);
+      return res.status(200).json({
+        message: "Verification email sent",
+      })
+    }
+    res.status(400).json({
+      message: "Verification has already been passed",
+    })
   }
 
   // async function updateSubscription(req, res, next) {
@@ -127,5 +198,7 @@ async function register(req, res, next) {
     login,
     logout,
     current,
+    verifyEmail,
+    verify,
     updateAvatar,
   };
